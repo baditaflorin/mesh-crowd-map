@@ -14,14 +14,16 @@ test("a coarse observation reaches another peer's accessible list", async ({
     await b.getByLabel("Your display name").fill("Bea");
     await a.getByLabel("What did you notice?").fill("Short queue at registration");
     await a.getByLabel("Optional context").fill("About five minutes.");
-    await a.getByLabel("Broad area").selectOption("north");
+    await a.getByRole("combobox", { name: "Broad area" }).selectOption("north");
     await a.getByRole("button", { name: "Share for one hour" }).click();
 
     await expect(b.getByText("Short queue at registration", { exact: true })).toBeVisible({
       timeout: 10_000,
     });
     await expect(
-      b.getByLabel("Observations everywhere").getByText("North", { exact: true }),
+      b
+        .getByRole("region", { name: "Broad areas, not locations." })
+        .getByRole("button", { name: /North, 1 note/i }),
     ).toBeVisible({ timeout: 10_000 });
   } finally {
     await cleanup();

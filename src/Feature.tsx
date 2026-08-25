@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  MeshButton,
+  MeshLaunch,
   MeshNameInput,
+  MeshPresence,
+  MeshStatusPill,
+  MeshSurface,
   useNamedPeer,
   useRoster,
   useSharedCollection,
@@ -58,11 +63,15 @@ export function isValidObservation(value: Observation): boolean {
 
 export function timeUntil(expiresAt: number, now = Date.now()): string {
   const minutes = Math.max(0, Math.ceil((expiresAt - now) / 60_000));
-  return minutes < 60 ? `${minutes}m left` : `${Math.ceil(minutes / 60)}h left`;
+  return minutes < 60 ? minutes + "m left" : Math.ceil(minutes / 60) + "h left";
 }
 
 function areaLabel(id: AreaId): string {
   return GRID_AREAS.find((area) => area.id === id)?.label ?? "Unknown area";
+}
+
+function pinLabel(count: number): string {
+  return count === 1 ? "1 live note" : count + " live notes";
 }
 
 function newId(): string {
@@ -74,6 +83,7 @@ function newId(): string {
 export function Feature({ room, config }: Props) {
   const namedPeer = useNamedPeer(config, room);
   const roster = useRoster(room);
+  const composerTitleRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [area, setArea] = useState<AreaId>("centre");
@@ -88,7 +98,20 @@ export function Feature({ room, config }: Props) {
       observations.items.filter((item) => isValidObservation(item) && item.expiresAt > Date.now()),
     [observations.items],
   );
+  const activeByArea = useMemo(() => {
+    const counts = new Map<AreaId, number>();
+    for (const observation of active) {
+      counts.set(observation.area, (counts.get(observation.area) ?? 0) + 1);
+    }
+    return counts;
+  }, [active]);
   const shown = filter === "all" ? active : active.filter((item) => item.area === filter);
+  const peopleHere = room ? Math.max(1, roster.present.length) : 0;
+  const presenceLabel = room
+    ? peopleHere === 1
+      ? "person in this room"
+      : "people in this room"
+    : "people joining";
 
   useEffect(() => {
     const prune = () => {
@@ -100,6 +123,21 @@ export function Feature({ room, config }: Props) {
     const timer = window.setInterval(prune, 30_000);
     return () => window.clearInterval(timer);
   }, [observations]);
+
+  const focusComposer = () => {
+    document.getElementById("crowd-compose")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    window.setTimeout(() => composerTitleRef.current?.focus({ preventScroll: true }), 220);
+  };
+
+  const focusPrivacy = () => {
+    document.getElementById("crowd-privacy")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  };
 
   const addObservation = (event: React.FormEvent) => {
     event.preventDefault();
@@ -125,164 +163,251 @@ export function Feature({ room, config }: Props) {
     }
     setTitle("");
     setNote("");
-    setNotice("Shared as a coarse area pin. It expires in one hour.");
+    setNotice("Shared as a broad-area note. It expires in one hour.");
   };
 
   return (
     <main className="crowd-page">
-      <section className="crowd-hero" aria-labelledby="crowd-title">
-        <p className="eyebrow">Mesh Crowd Map</p>
-        <h1 id="crowd-title">What’s happening—without tracking anyone.</h1>
-        <p>
-          Share a short-lived observation in a broad area you choose. This is a schematic grid, not
-          a street map: no GPS, coordinates, tiles, or precise location collection.
-        </p>
-        <span className={`presence ${room ? "is-live" : ""}`}>
-          <span aria-hidden="true" />{" "}
-          {room ? `${Math.max(1, roster.present.length)} people connected` : "Joining room…"}
-        </span>
-      </section>
-
-      <section className="crowd-layout" aria-label="Shared coarse observation board">
-        <form className="card compose-card" onSubmit={addObservation}>
-          <p className="eyebrow">Add an observation</p>
-          <h2>Place a coarse pin</h2>
-          <label>
-            What did you notice?
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. Short queue at registration"
-              maxLength={80}
-              required
-              minLength={2}
-            />
-          </label>
-          <label>
-            Optional context
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="Keep it useful; never add a person’s precise location."
-              maxLength={240}
-              rows={3}
-            />
-          </label>
-          <label>
-            Broad area
-            <select value={area} onChange={(event) => setArea(event.target.value as AreaId)}>
-              {GRID_AREAS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="primary" type="submit" disabled={!room}>
-            Share for one hour
-          </button>
-          {notice && (
-            <p className="notice" role="status">
-              {notice}
-            </p>
-          )}
-        </form>
-
-        <section className="card grid-card" aria-labelledby="grid-title">
-          <div className="grid-heading">
-            <div>
-              <p className="eyebrow">Coarse area board</p>
-              <h2 id="grid-title">Schematic, not GPS</h2>
+      <MeshLaunch
+        className="crowd-launch"
+        eyebrow="Crowd Map · shared field note"
+        heading="See the room, not the people."
+        promise="Leave a short-lived note in a broad area. Crowd Map never requests GPS, coordinates, or a precise location."
+        presence={
+          <MeshPresence
+            count={peopleHere}
+            label={presenceLabel}
+            state={room ? "connected" : "connecting"}
+            size="md"
+            announce="polite"
+          />
+        }
+        preview={
+          <MeshSurface
+            as="section"
+            className="crowd-board"
+            tone="raised"
+            padding="lg"
+            aria-labelledby="crowd-board-title"
+          >
+            <div className="crowd-board-header">
+              <div>
+                <p className="crowd-kicker">The shared board</p>
+                <h2 id="crowd-board-title">Broad areas, not locations.</h2>
+              </div>
+              <MeshStatusPill tone={room ? "live" : "warning"} dot>
+                {pinLabel(active.length)}
+              </MeshStatusPill>
             </div>
-            <span>{active.length} active</span>
-          </div>
-          <div className="area-grid" role="group" aria-label="Filter observations by coarse area">
-            {GRID_AREAS.map((item) => {
-              const count = active.filter((observation) => observation.area === item.id).length;
-              const selected = filter === item.id;
-              return (
-                <button
-                  className={selected ? "area-cell is-selected" : "area-cell"}
-                  type="button"
-                  key={item.id}
-                  onClick={() => setFilter(selected ? "all" : item.id)}
-                  aria-pressed={selected}
-                >
-                  <strong>{item.label}</strong>
-                  <span>{count ? `${count} pin${count === 1 ? "" : "s"}` : "No pins"}</span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="grid-caption">
-            Choose a cell to filter the accessible observation list below.
-          </p>
-        </section>
-      </section>
-
-      <section className="card list-card" aria-labelledby="list-title">
-        <div className="list-heading">
-          <div>
-            <p className="eyebrow">Accessible list</p>
-            <h2 id="list-title">
-              Observations {filter === "all" ? "everywhere" : `in ${areaLabel(filter)}`}
-            </h2>
-          </div>
-          {filter !== "all" && (
-            <button className="quiet" type="button" onClick={() => setFilter("all")}>
-              Show all
-            </button>
-          )}
-        </div>
-        {shown.length === 0 ? (
-          <p className="empty">
-            No active observations here. Add a broad-area pin to help the room orient itself.
-          </p>
-        ) : (
-          <ol className="observation-list">
-            {shown
-              .sort((a, b) => b.createdAt - a.createdAt)
-              .map((observation) => (
-                <li key={observation.id}>
-                  <div>
-                    <span className="area-tag">{areaLabel(observation.area)}</span>
-                    <strong>{observation.title}</strong>
-                    {observation.note && <p>{observation.note}</p>}
-                    <small>
-                      Shared by {observation.author} · {timeUntil(observation.expiresAt)}
-                    </small>
-                  </div>
-                  <button
-                    className="quiet remove"
+            <div
+              className="crowd-area-grid"
+              role="group"
+              aria-label="Filter observations by broad area"
+            >
+              {GRID_AREAS.map((item) => {
+                const count = activeByArea.get(item.id) ?? 0;
+                const selected = filter === item.id;
+                const cellLabel = count === 1 ? "1 note" : count + " notes";
+                return (
+                  <MeshButton
+                    className={selected ? "crowd-area-cell is-selected" : "crowd-area-cell"}
+                    variant={selected ? "primary" : "secondary"}
+                    size="sm"
                     type="button"
-                    onClick={() => observations.remove(observation.id)}
-                    aria-label={`Remove ${observation.title}`}
+                    key={item.id}
+                    onClick={() => setFilter(selected ? "all" : item.id)}
+                    aria-pressed={selected}
+                    aria-label={
+                      item.label + ", " + cellLabel + (selected ? ", selected" : ", not selected")
+                    }
                   >
-                    Remove
-                  </button>
-                </li>
-              ))}
-          </ol>
-        )}
+                    <strong>{item.label}</strong>
+                    <span>{cellLabel}</span>
+                  </MeshButton>
+                );
+              })}
+            </div>
+            <p className="crowd-board-caption">
+              Select an area to filter the accessible list. Notes expire after one hour.
+            </p>
+          </MeshSurface>
+        }
+        primaryAction={{
+          label: "Add an observation",
+          onClick: focusComposer,
+        }}
+        secondaryAction={{
+          label: "Why this stays private",
+          onClick: focusPrivacy,
+        }}
+        loading={!room}
+        connectionHint={
+          room ? null : "Joining the shared board. You can still choose an area and prepare a note."
+        }
+      />
+
+      <section className="crowd-workspace" aria-label="Create and review room observations">
+        <MeshSurface
+          as="section"
+          className="crowd-compose"
+          tone="accent"
+          padding="lg"
+          aria-labelledby="crowd-compose-title"
+        >
+          <header className="crowd-section-heading">
+            <p className="crowd-kicker">Share a field note</p>
+            <h2 id="crowd-compose-title">Put context on the board.</h2>
+            <p>Keep it useful, broad, and temporary.</p>
+          </header>
+          <form id="crowd-compose" onSubmit={addObservation}>
+            <label>
+              What did you notice?
+              <input
+                ref={composerTitleRef}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Short queue at registration"
+                maxLength={80}
+                required
+                minLength={2}
+              />
+            </label>
+            <label>
+              Optional context
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="Keep it useful; never add a precise location."
+                maxLength={240}
+                rows={3}
+              />
+            </label>
+            <label>
+              Broad area
+              <select value={area} onChange={(event) => setArea(event.target.value as AreaId)}>
+                {GRID_AREAS.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <MeshButton type="submit" fullWidth disabled={!room}>
+              {room ? "Share for one hour" : "Joining room…"}
+            </MeshButton>
+            {notice && (
+              <p className="crowd-notice" role="status">
+                {notice}
+              </p>
+            )}
+          </form>
+        </MeshSurface>
+
+        <MeshSurface
+          as="section"
+          className="crowd-observations"
+          tone="raised"
+          padding="lg"
+          aria-labelledby="crowd-list-title"
+        >
+          <header className="crowd-list-header">
+            <div>
+              <p className="crowd-kicker">Accessible list</p>
+              <h2 id="crowd-list-title">
+                {filter === "all"
+                  ? "What the room is noticing."
+                  : "Notes in " + areaLabel(filter) + "."}
+              </h2>
+            </div>
+            {filter !== "all" ? (
+              <MeshButton variant="quiet" size="sm" type="button" onClick={() => setFilter("all")}>
+                View all
+              </MeshButton>
+            ) : (
+              <MeshStatusPill tone="info">All areas</MeshStatusPill>
+            )}
+          </header>
+          {shown.length === 0 ? (
+            <div className="crowd-empty">
+              <MeshStatusPill tone="neutral" dot>
+                No live notes yet
+              </MeshStatusPill>
+              <p>Add a broad-area note to help the room orient itself.</p>
+            </div>
+          ) : (
+            <ol className="crowd-observation-list">
+              {shown
+                .sort((a, b) => b.createdAt - a.createdAt)
+                .map((observation) => (
+                  <li key={observation.id}>
+                    <div>
+                      <MeshStatusPill tone="info" size="sm">
+                        {areaLabel(observation.area)}
+                      </MeshStatusPill>
+                      <strong>{observation.title}</strong>
+                      {observation.note && <p>{observation.note}</p>}
+                      <small>
+                        Shared by {observation.author} · {timeUntil(observation.expiresAt)}
+                      </small>
+                    </div>
+                    <MeshButton
+                      className="crowd-remove"
+                      variant="quiet"
+                      size="sm"
+                      type="button"
+                      onClick={() => observations.remove(observation.id)}
+                      aria-label={"Remove " + observation.title}
+                    >
+                      Remove
+                    </MeshButton>
+                  </li>
+                ))}
+            </ol>
+          )}
+        </MeshSurface>
       </section>
 
-      <section className="identity-card card">
-        <div>
-          <p className="eyebrow">Your card</p>
-          <h2>{namedPeer.myName || "Add your name"}</h2>
-        </div>
-        <MeshNameInput
-          value={namedPeer.name}
-          onChange={namedPeer.setName}
-          ariaLabel="Your display name"
-          placeholder="How should this room know you?"
-          maxLength={32}
-        />
+      <section className="crowd-lower">
+        <MeshSurface
+          as="section"
+          className="crowd-identity"
+          tone="quiet"
+          padding="md"
+          aria-labelledby="crowd-identity-title"
+        >
+          <div>
+            <p className="crowd-kicker">Your card</p>
+            <h2 id="crowd-identity-title">Be recognisable, not identifiable.</h2>
+            <p>Use a short display name so a room can place a note without collecting a profile.</p>
+          </div>
+          <MeshNameInput
+            value={namedPeer.name}
+            onChange={namedPeer.setName}
+            label="Your display name"
+            placeholder="How should this room know you?"
+            maxLength={32}
+            showCounter
+            hint="Only this room sees it."
+          />
+        </MeshSurface>
+
+        <MeshSurface
+          as="aside"
+          id="crowd-privacy"
+          className="crowd-privacy"
+          tone="quiet"
+          padding="md"
+          aria-label="Privacy promise"
+        >
+          <MeshStatusPill tone="info" dot>
+            No GPS, coordinates, or map tiles
+          </MeshStatusPill>
+          <p>
+            Every room peer can read broad-area notes. They disappear after one hour, and the layout
+            deliberately avoids exact location data.
+          </p>
+        </MeshSurface>
       </section>
-      <p className="privacy-note">
-        Every room peer can read coarse pins. Pins expire after one hour. This app deliberately does
-        not request device location or render a precise map.
-      </p>
     </main>
   );
 }

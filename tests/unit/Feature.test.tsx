@@ -8,13 +8,19 @@ describe("Feature (component)", () => {
   it("renders an accessible coarse pin board when connected", () => {
     const room = createMockRoom();
     render(<Feature room={room} config={config} />);
-    expect(screen.getByRole("heading", { name: /What’s happening/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "See the room, not the people." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Filter observations by broad area" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /notes, not selected/i })).toHaveLength(9);
     expect(screen.getByText("Accessible list")).toBeInTheDocument();
   });
 
   it("shows a connecting state when room is null", () => {
     render(<Feature room={null} config={config} />);
-    expect(screen.getByText(/Joining room/i)).toBeInTheDocument();
+    expect(screen.getByText(/Joining the shared board/i)).toBeInTheDocument();
   });
 
   it("validates only bounded coarse observations", () => {
