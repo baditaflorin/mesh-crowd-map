@@ -39,7 +39,8 @@ Read the principles → **https://baditaflorin.github.io/rootless-computing/prin
 
 ## Quickstart
 
-Open the live URL on two devices in the same room (set in ⚙ settings, or scan the room QR). Everything else is in-app.
+Open the live URL on two devices in the same room (open **Settings** to change the room, or use
+**Invite** to share its QR/link). Everything else is in-app.
 
 For local hacking:
 
@@ -72,13 +73,14 @@ The settings drawer lets the user override signaling and TURN endpoints. localSt
 
 If endpoints are blank or unreachable, the app falls back to STUN-only.
 
-## Version + commit on every screen
+## Product chrome and build details
 
-The bottom-right footer on every screen of the live app shows:
+The compact app bar keeps the shared-room controls available without taking over the board. The
+**Settings** footer includes:
 
-- `source` → this repo
-- `tip ♥` → PayPal
-- `vX.Y.Z · <short-sha>` — version from `package.json` plus the build-time git commit
+- source → this repo
+- support → PayPal
+- vX.Y.Z · <short-sha> — version from package.json plus the build-time git commit
 
 ## Build & deploy
 
