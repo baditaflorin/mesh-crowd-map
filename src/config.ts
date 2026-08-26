@@ -2,6 +2,7 @@ import { createMeshConfig } from "@baditaflorin/mesh-common";
 
 export const config = createMeshConfig({
   appName: "mesh-crowd-map",
+  breadcrumbs: false,
   displayName: "Crowd Map",
   visualProfile: "field",
   shellLayout: "inset",
